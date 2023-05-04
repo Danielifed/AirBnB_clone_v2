@@ -1,48 +1,83 @@
-# Redo the task #0 but by using Puppet:
-
-exec {'apt-get-update':
-  command => '/usr/bin/apt-get update'
-}
-
-package {'apache2.2-common':
-  ensure  => 'absent',
-  require => Exec['apt-get-update']
-}
-
+# Install Nginx if not already installed
 package { 'nginx':
-  ensure  => 'installed',
-  require => Package['apache2.2-common']
+  ensure => installed,
 }
 
-service {'nginx':
-  ensure  =>  'running',
-  require => file_line['LOCATION SETUP']
-}
-
-file { ['/data', '/data/web_static', '/data/web_static/shared', '/data/web_static/releases', '/data/web_static/releases/test'] :
-  ensure  => 'directory',
+# Create necessary directories
+file { '/data/':
+  ensure  => directory,
   owner   => 'ubuntu',
   group   => 'ubuntu',
-  require =>  Package['nginx']
+  recurse => true,
 }
 
+file { '/data/web_static/':
+  ensure  => directory,
+  owner   => 'ubuntu',
+  group   => 'ubuntu',
+}
+
+file { '/data/web_static/releases/':
+  ensure  => directory,
+  owner   => 'ubuntu',
+  group   => 'ubuntu',
+}
+
+file { '/data/web_static/shared/':
+  ensure  => directory,
+  owner   => 'ubuntu',
+  group   => 'ubuntu',
+}
+
+file { '/data/web_static/releases/test/':
+  ensure  => directory,
+  owner   => 'ubuntu',
+  group   => 'ubuntu',
+}
+
+# Create a fake HTML file
 file { '/data/web_static/releases/test/index.html':
-  ensure  => 'present',
-  content => 'Hello AirBnb',
-  require =>  Package['nginx']
+  ensure  => file,
+  owner   => 'ubuntu',
+  group   => 'ubuntu',
+  content => '<html><body>This is a test HTML file.</body></html>',
 }
 
+# Create a symbolic link
 file { '/data/web_static/current':
-  ensure => 'link',
-  target => '/data/web_static/releases/test',
-  force  => true
+  ensure => link,
+  target => '/data/web_static/releases/test/',
+  force  => true,
 }
 
-file_line { 'LOCATION SETUP ':
-  ensure  => 'present',
-  path    => '/etc/nginx/sites-enabled/default',
-  line    => 'location /hbnb_static/ { alias /data/web_static/current/; autoindex off; } location / { ',
-  match   => '^\s+location+',
+# Update Nginx configuration
+file { '/etc/nginx/sites-available/default':
+  ensure => present,
+  owner  => 'root',
+  group  => 'root',
+  mode   => '0644',
+  content => "# Nginx configuration
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name didnow.tech;
+
+    location /hbnb_static {
+        alias /data/web_static/current/;
+        index index.html;
+    }
+
+    location / {
+        # Other configurations for your site
+    }
+}",
   require => Package['nginx'],
-  notify  => Service['nginx'],
+}
+
+# Restart Nginx after updating configuration
+service { 'nginx':
+  ensure  => running,
+  enable  => true,
+  require => File['/etc/nginx/sites-available/default'],
 }
