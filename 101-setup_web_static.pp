@@ -1,63 +1,46 @@
-# A puppet script that sets up web servers for the deployment of web_static.
+exec {'apt-get-update':
+  command => '/usr/bin/apt-get update'
+}
 
-include stdlib
-
-exec { 'update':
-  command => '/usr/bin/apt-get update',
+package {'apache2.2-common':
+  ensure  => 'absent',
+  require => Exec['apt-get-update']
 }
 
 package { 'nginx':
-  ensure  => installed,
-  name    => 'nginx',
-  require => Exec['update'],
+  ensure  => 'installed',
+  require => Package['apache2.2-common']
 }
 
-file { [ '/data/', '/data/web_static/', '/data/web_static/releases/',
-          '/data/web_static/releases/test/' ]:
-  ensure => directory,
-  owner  => 'ubuntu',
-  group  => 'ubuntu',
+service {'nginx':
+  ensure  =>  'running',
+  require => file_line['LOCATION SETUP']
 }
 
-file { '/data/web_static/shared':
-  ensure => directory,
-  owner  => 'ubuntu',
-  group  => 'ubuntu',
+file { ['/data', '/data/web_static', '/data/web_static/shared', '/data/web_static/releases', '/data/web_static/releases/test'] :
+  ensure  => 'directory',
+  owner   => 'ubuntu',
+  group   => 'ubuntu',
+  require =>  Package['nginx']
 }
 
-exec { 'Creates fake index.html':
-  path    => ['/usr/bin', '/usr/sbin', '/bin'],
-  command => 'echo "Hello Nginx!" > /data/web_static/releases/test/index.html',
-}
-
-exec { 'Change user:group owner of index.html':
-  path    => ['/usr/bin', '/usr/sbin', '/bin'],
-  command => 'chown -hR ubuntu:ubuntu /data/web_static/releases/test/index.html',
+file { '/data/web_static/releases/test/index.html':
+  ensure  => 'present',
+  content => 'Hello AirBnb',
+  require =>  Package['nginx']
 }
 
 file { '/data/web_static/current':
   ensure => 'link',
-  owner  => 'ubuntu',
-  group  => 'ubuntu',
-  target => '/data/web_static/releases/test'
+  target => '/data/web_static/releases/test',
+  force  => true
 }
 
-$to_add = '
-        location /hbnb_static/ {
-		                alias /data/web_static/current/;
-        }'
-
-file_line { 'location /hbnb_static/':
+file_line { 'LOCATION SETUP ':
   ensure  => 'present',
-  path    => '/etc/nginx/sites-available/default',
-  after   => 'server_name _;',
-  line    => $to_add,
+  path    => '/etc/nginx/sites-enabled/default',
+  line    => 'location /hbnb_static/ { alias /data/web_static/current/; autoindex off; } location / { ',
+  match   => '^\s+location+',
   require => Package['nginx'],
-}
-
-service { 'nginx':
-  ensure     => running,
-  enable     => true,
-  hasrestart => true,
-  require    => Package['nginx'],
+  notify  => Service['nginx'],
 }
